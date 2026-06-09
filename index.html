@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>종이접기 - 김태인이 만듬</title>
+    <style>
+        :root {
+            --bg-main: #1c140e;
+            --panel-bg: #2b1f17;
+            --accent-gold: #d4a373;
+            --text-light: #f5efe6;
+            --text-muted: #8c7865;
+        }
+
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: var(--bg-main);
+            background-image: 
+                linear-gradient(rgba(212, 163, 115, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(212, 163, 115, 0.02) 1px, transparent 1px);
+            background-size: 25px 25px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            color: var(--text-light);
+            overflow: hidden;
+        }
+
+        .header-section {
+            text-align: center;
+            margin-bottom: 15px;
+            z-index: 10;
+        }
+
+        .main-title {
+            font-size: 2rem;
+            font-weight: 800;
+            margin: 0 0 6px 0;
+            letter-spacing: -1px;
+            color: var(--text-light);
+        }
+
+        .maker-badge {
+            display: inline-block;
+            background: #4a3525;
+            color: var(--accent-gold);
+            padding: 5px 14px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            border: 1px solid rgba(212, 163, 115, 0.3);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .canvas-container {
+            position: relative;
+            width: 90%;
+            max-width: 450px;
+            padding: 10px;
+            background: var(--panel-bg);
+            border-radius: 20px;
+            border: 1px solid rgba(212, 163, 115, 0.15);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            z-index: 10;
+            box-sizing: border-box;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            background: #150e0a;
+            border-radius: 12px;
+        }
+
+        .btn-group {
+            margin-top: 20px;
+            display: flex;
+            gap: 14px;
+            z-index: 10;
+            width: 90%;
+            max-width: 450px;
+        }
+
+        button {
+            flex: 1;
+            padding: 14px 0;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-light);
+            background: #3a2a1f;
+            border: 1px solid rgba(212, 163, 115, 0.25);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.1s ease;
+            box-shadow: 0 4px 0 #251a12, 0 6px 10px rgba(0,0,0,0.3);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        button:active {
+            transform: translateY(4px);
+            box-shadow: 0 0px 0 #251a12, 0 2px 5px rgba(0,0,0,0.3);
+        }
+
+        .hint {
+            margin-top: 15px;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 500;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-section">
+        <h1 class="main-title">종이접기</h1>
+        <div class="maker-badge">김태인이 만듬</div>
+    </div>
+    
+    <div class="canvas-container">
+        <canvas id="canvas" width="450" height="450"></canvas>
+    </div>
+    
+    <div class="btn-group">
+        <button onclick="undo()">↩️ 되돌리기</button>
+        <button onclick="resetPaper()">✨ 다시 펴기</button>
+    </div>
+
+    <div class="hint">🎵 화면을 터치하면 2중 무한 반복 BGM이 시작됩니다!</div>
+
+    <script>
+        // ----------------------------------------------------
+        // 🎵 [오디오 무한 반복 2중 안전 잠금 설정]
+        // ----------------------------------------------------
+        const bgm = new Audio('aa.mp3');
+        bgm.loop = true;          // 1차 기본 무한 반복 활성화
+        bgm.volume = 0.4;         
+
+        // 🔥 2차 백업 안전장치: 노래가 끝나는 이벤트(ended)가 발생하면 강제로 처음부터 재생
+        bgm.addEventListener('ended', function() {
+            this.currentTime = 0;
+            this.play();
+        }, false);
+
+        let isAudioUnlocked = false;
+
+        function unlockAudio() {
+            if (isAudioUnlocked) return;
+            
+            bgm.play().then(() => {
+                isAudioUnlocked = true;
+                document.querySelector('.hint').innerText = "모서리를 잡고 부드럽게 스윽- 끌고 가세요";
+                
+                window.removeEventListener('click', unlockAudio);
+                window.removeEventListener('touchstart', unlockAudio);
+            }).catch(err => {
+                console.log("오디오 락 해제 대기 중:", err);
+            });
+        }
+
+        window.addEventListener('click', unlockAudio);
+        window.addEventListener('touchstart', unlockAudio);
+        // ----------------------------------------------------
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const size = 450;
+        const margin = 95;
+        
+        const COLORS = {
+            paperFront: '#b89772',
+            paperBack: '#f7f4eb',
+            vertexCore: '#e9c46a',
+            vertexHalo: 'rgba(233, 196, 106, 0.25)',
+            guideLine: 'rgba(212, 163, 115, 0.35)',
+            dragLine: '#d4a373'
+        };
+
+        const initialPaper = [
+            {x: margin, y: margin},
+            {x: size - margin, y: margin},
+            {x: size - margin, y: size - margin},
+            {x: margin, y: size - margin}
+        ];
+
+        let polygons = [{ vertices: [...initialPaper], isFront: true }];
+        let history = [];
+        let savedPolygons = [];
+        
+        let isDragging = false;
+        let grabbedVertex = null;
+        let currentMousePos = null;
+
+        function resetPaper() {
+            polygons = [{ vertices: [...initialPaper], isFront: true }];
+            history = [];
+            draw();
+        }
+
+        function undo() {
+            if (history.length > 0) {
+                polygons = history.pop();
+                draw();
+            }
+        }
+
+        function calculateFoldLine(pStart, pCurrent) {
+            const mx = (pStart.x + pCurrent.x) / 2;
+            const my = (pStart.y + pCurrent.y) / 2;
+            const A = pCurrent.x - pStart.x;
+            const B = pCurrent.y - pStart.y;
+            const C = -(A * mx + B * my);
+            return { A, B, C };
+        }
+
+        function mirrorPoint(p, A, B, C) {
+            const d = (A * p.x + B * p.y + C) / (A * A + B * B);
+            return { x: p.x - 2 * A * d, y: p.y - 2 * B * d };
+        }
+
+        function slicePolygon(poly, A, B, C, sideStart) {
+            const keepVertices = [];
+            const foldVertices = [];
+            const v = poly.vertices;
+            const n = v.length;
+
+            for (let i = 0; i < n; i++) {
+                const current = v[i];
+                const next = v[(i + 1) % n];
+                
+                const sideCurrent = A * current.x + B * current.y + C;
+                const sideNext = A * next.x + B * next.y + C;
+
+                if (Math.sign(sideCurrent) === Math.sign(sideStart) || Math.abs(sideCurrent) < 0.001) {
+                    foldVertices.push(current);
+                } else {
+                    keepVertices.push(current);
+                }
+
+                if ((sideCurrent > 0 && sideNext < 0) || (sideCurrent < 0 && sideNext > 0)) {
+                    const t = sideCurrent / (sideCurrent - sideNext);
+                    const intersect = {
+                        x: current.x + t * (next.x - current.x),
+                        y: current.y + t * (next.y - current.y)
+                    };
+                    keepVertices.push(intersect);
+                    foldVertices.push(intersect);
+                }
+            }
+            return { keepVertices, foldVertices };
+        }
+
+        function executeFold(pStart, pCurrent) {
+            const { A, B, C } = calculateFoldLine(pStart, pCurrent);
+            if (A === 0 && B === 0) return;
+
+            const sideStart = A * pStart.x + B * pStart.y + C;
+            let nextPolygons = [];
+            let foldedPolygons = [];
+
+            for (let poly of savedPolygons) {
+                const { keepVertices, foldVertices } = slicePolygon(poly, A, B, C, sideStart);
+                if (keepVertices.length >= 3) {
+                    nextPolygons.push({ vertices: keepVertices, isFront: poly.isFront });
+                }
+                if (foldVertices.length >= 3) {
+                    const mirroredVertices = foldVertices.map(p => mirrorPoint(p, A, B, C));
+                    foldedPolygons.push({ vertices: mirroredVertices, isFront: !poly.isFront });
+                }
+            }
+            polygons = [...nextPolygons, ...foldedPolygons];
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            polygons.forEach((poly) => {
+                if (poly.vertices.length < 3) return;
+                
+                ctx.save();
+                ctx.shadowColor = 'rgba(10, 5, 0, 0.4)';
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetY = 5;
+
+                ctx.beginPath();
+                ctx.moveTo(poly.vertices[0].x, poly.vertices[0].y);
+                for (let i = 1; i < poly.vertices.length; i++) {
+                    ctx.lineTo(poly.vertices[i].x, poly.vertices[i].y);
+                }
+                ctx.closePath();
+
+                ctx.fillStyle = poly.isFront ? COLORS.paperFront : COLORS.paperBack;
+                ctx.fill();
+                ctx.restore();
+
+                ctx.strokeStyle = poly.isFront ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)';
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+            });
+
+            polygons.forEach(poly => {
+                poly.vertices.forEach(v => {
+                    ctx.beginPath();
+                    ctx.arc(v.x, v.y, 14, 0, Math.PI * 2);
+                    ctx.fillStyle = COLORS.vertexHalo;
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.arc(v.x, v.y, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = COLORS.vertexCore;
+                    ctx.fill();
+                });
+            });
+
+            if (isDragging && grabbedVertex && currentMousePos) {
+                const { A, B, C } = calculateFoldLine(grabbedVertex, currentMousePos);
+                
+                ctx.beginPath();
+                if (Math.abs(B) > 0.001) {
+                    ctx.moveTo(0, -C / B);
+                    ctx.lineTo(size, -(A * size + C) / B);
+                } else {
+                    ctx.moveTo(-C / A, 0);
+                    ctx.lineTo(-C / A, size);
+                }
+                ctx.strokeStyle = COLORS.guideLine;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 5]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.beginPath();
+                ctx.moveTo(grabbedVertex.x, grabbedVertex.y);
+                ctx.lineTo(currentMousePos.x, currentMousePos.y);
+                ctx.strokeStyle = COLORS.dragLine;
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(currentMousePos.x, currentMousePos.y, 6, 0, Math.PI * 2);
+                ctx.fillStyle = COLORS.vertexCore;
+                ctx.fill();
+            }
+        }
+
+        function getEventPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+
+        function handleStart(e) {
+            if (e.target === canvas) e.preventDefault();
+            
+            const mPos = getEventPos(e);
+            let closest = null;
+            let minDist = 55;
+            
+            polygons.forEach(poly => {
+                poly.vertices.forEach(v => {
+                    const d = Math.hypot(v.x - mPos.x, v.y - mPos.y);
+                    if (d < minDist) {
+                        minDist = d;
+                        closest = { x: v.x, y: v.y };
+                    }
+                });
+            });
+
+            if (closest) {
+                isDragging = true;
+                grabbedVertex = closest;
+                currentMousePos = mPos;
+                
+                history.push(JSON.parse(JSON.stringify(polygons)));
+                if (history.length > 30) history.shift();
+                
+                savedPolygons = JSON.parse(JSON.stringify(polygons));
+            }
+        }
+
+        function handleMove(e) {
+            if (!isDragging) return;
+            if (e.cancelable) e.preventDefault();
+            
+            currentMousePos = getEventPos(e);
+
+            const dist = Math.hypot(currentMousePos.x - grabbedVertex.x, currentMousePos.y - grabbedVertex.y);
+            if (dist < 15) return;
+
+            executeFold(grabbedVertex, currentMousePos);
+            draw();
+        }
+
+        function handleEnd(e) {
+            if (!isDragging) return;
+            isDragging = false;
+            
+            const dist = Math.hypot(currentMousePos.x - grabbedVertex.x, currentMousePos.y - grabbedVertex.y);
+            if (dist < 15) history.pop();
+            
+            grabbedVertex = null;
+            draw();
+        }
+
+        canvas.addEventListener('mousedown', handleStart);
+        canvas.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleEnd);
+
+        canvas.addEventListener('touchstart', handleStart, {passive: false});
+        canvas.addEventListener('touchmove', handleMove, {passive: false});
+        window.addEventListener('touchend', handleEnd);
+
+        draw();
+    </script>
+</body>
+</html>
